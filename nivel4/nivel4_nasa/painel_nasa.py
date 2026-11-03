@@ -61,3 +61,19 @@ def buscar_asteroides(inicio, fim):
 
     return pd.DataFrame(registros)
 
+def grafico_asteroides(df, inicio, fim):
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(data=df, x="distancia_km", y="velocidade_km_s",
+                    size="diametro_m", hue="perigoso",
+                    sizes=(20, 300), alpha=0.7)
+    plt.xscale("log")
+    plt.xlabel("Distância da Terra (km, escala log)")
+    plt.ylabel("Velocidade relativa (km/s)")
+    plt.title(f"Asteroides próximos: {inicio} a {fim}")
+    plt.tight_layout()
+    plt.savefig(PASTA_SAIDAS / "asteroides.png", dpi=200)
+    plt.show()
+
+    print("Correlação distância x velocidade:")
+    print(df[["distancia_km", "velocidade_km_s"]].corr().round(3))
+
