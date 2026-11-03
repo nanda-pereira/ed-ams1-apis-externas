@@ -67,3 +67,55 @@ def buscar_todas_paginas(endpoint, params=None, max_paginas=3, itens=100):
             break
         time.sleep(0.3)
     return resultados
+
+# ---------------------------------------------------------------------------
+# desafio 1: ranking de deputados por tema
+
+def proposicoes_por_tema(tema, ano, tipo="PL", max_paginas=3):
+    return buscar_todas_paginas("proposicoes", {
+        "keywords": tema,
+        "ano": ano,
+        "siglaTipo": tipo,
+        "ordem": "DESC",
+        "ordenarPor": "id",
+    }, max_paginas)
+
+
+def ranking_deputados(proposicoes):
+    """Conta em quantas proposições cada deputado aparece como autor."""
+    cache = {}
+    if CACHE_AUTORES.exists():
+        cache = json.loads(CACHE_AUTORES.read_text(encoding="utf-8"))
+
+    contagem = Counter()
+    for i, prop in enumerate(proposicoes, 1):
+        chave = str(prop["id"])
+        if chave not in cache:
+            corpo = requisitar(f"proposicoes/{chave}/autores")
+            cache[chave] = corpo["dados"] if corpo else []
+            time.sleep(0.2)
+
+        for autor in cache[chave]:
+            # autores também podem ser comissões, o Executivo, etc.
+            if "/deputados/" in (autor.get("uri") or ""):
+                contagem[autor["nome"]] += 1
+
+        if i % 25 == 0:
+            print(f"  {i}/{len(proposicoes)} proposições processadas")
+
+    CACHE_AUTORES.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+
+    df = pd.DataFrame(contagem.items(), columns=["deputado", "proposicoes"])
+    return df.sort_values("proposicoes", ascending=False).reset_index(drop=True)
+
+
+def grafico_ranking(df, tema, ano, top=10):
+    topo = df.head(top)
+    plt.figure(figsize=(10, 6))
+    sns.barplot(data=topo, y="deputado", x="proposicoes", orient="h", color="#2a9d8f")
+    plt.title(f"Deputados com mais proposições sobre '{tema}' em {ano}")
+    plt.xlabel("Proposições apresentadas")
+    plt.ylabel("")
+    plt.tight_layout()
+    plt.savefig(PASTA_SAIDAS / f"ranking_{tema}_{ano}.png", dpi=200)
+    plt.show()
