@@ -1,4 +1,4 @@
 .env
 venv/
 __pycache__/
-output/cache_*.json
+saidas/cache_*.json
