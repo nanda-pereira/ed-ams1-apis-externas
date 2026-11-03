@@ -132,3 +132,78 @@ def desafio_1(cabecalhos):
     print(df[["icao24", "callsign", "categoria", "altitude_baro"]].head(10).to_string(index=False))
     desenhar_mapa(df, f"Aeronaves sobre o Brasil: {nome}", PASTA_SAIDAS / "mapa_brasil.html")
 
+# ---------------------------------------------------------------------------
+# desafio 2: trajetória de uma aeronave
+
+def buscar_trajetoria(icao24, cabecalhos):
+    """Endpoint experimental /tracks. Retorna lista de [lat, lon] ou None."""
+    r = requests.get(f"{BASE_URL}/tracks",
+                     params={"icao24": icao24.lower(), "time": 0},
+                     headers=cabecalhos, timeout=30)
+    if r.status_code != 200:
+        print("/tracks indisponível:", r.status_code)
+        return None
+
+    caminho = r.json().get("path") or []
+    # cada ponto: [tempo, latitude, longitude, altitude, rumo, no_solo]
+    return [[p[1], p[2]] for p in caminho if p[1] is not None and p[2] is not None]
+
+
+def coletar_trajetoria_manual(icao24, cabecalhos, amostras=12, intervalo=15):
+    """Plano B: consulta a posição várias vezes e monta a trilha."""
+    print(f"Coletando {amostras} posições a cada {intervalo}s...")
+    pontos = []
+    for _ in range(amostras):
+        r = requests.get(f"{BASE_URL}/states/all", params={"icao24": icao24.lower()},
+                         headers=cabecalhos, timeout=30)
+        estados = (r.json().get("states") or []) if r.status_code == 200 else []
+        if estados and estados[0][5] is not None:
+            pontos.append([estados[0][6], estados[0][5]])   # [latitude, longitude]
+        time.sleep(intervalo)
+    return pontos
+
+
+def desenhar_trajetoria(pontos, icao24):
+    mapa = folium.Map(location=pontos[0], zoom_start=6, tiles="CartoDB positron")
+    folium.PolyLine(pontos, color="#e76f51", weight=4, opacity=0.85).add_to(mapa)
+    folium.Marker(pontos[0], tooltip="Início", icon=folium.Icon(color="green")).add_to(mapa)
+    folium.Marker(pontos[-1], tooltip="Posição mais recente", icon=folium.Icon(color="red")).add_to(mapa)
+    mapa.fit_bounds(pontos)
+
+    arquivo = PASTA_SAIDAS / f"trajetoria_{icao24}.html"
+    mapa.save(arquivo)
+    webbrowser.open(arquivo.as_uri())
+
+
+def desafio_2(cabecalhos):
+    icao24 = input("ICAO24 da aeronave (veja na tabela do desafio 1): ").strip()
+    if not icao24:
+        return
+
+    pontos = buscar_trajetoria(icao24, cabecalhos)
+    if not pontos:
+        pontos = coletar_trajetoria_manual(icao24, cabecalhos)
+
+    if len(pontos) < 2:
+        print("Pontos insuficientes. A aeronave precisa estar em voo.")
+        return
+    print(len(pontos), "pontos na trajetória")
+    desenhar_trajetoria(pontos, icao24)
+
+
+# ---------------------------------------------------------------------------
+
+def main():
+    cabecalhos = obter_cabecalhos()
+    print("\n1 - Mapa das aeronaves sobre o Brasil")
+    print("2 - Trajetória de uma aeronave (ICAO24)")
+    opcao = input("Opção [1]: ").strip() or "1"
+
+    if opcao == "2":
+        desafio_2(cabecalhos)
+    else:
+        desafio_1(cabecalhos)
+
+
+if __name__ == "__main__":
+    main()
